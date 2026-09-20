@@ -1,19 +1,27 @@
---!strict
 --[[
 	Catálogo de emotes UGC
 	LocalScript → StarterPlayer.StarterPlayerScripts
 
-	Consulta el Marketplace con AvatarEditorService:SearchCatalog
-	(método oficial usable desde el cliente). No usa HttpService ni
-	endpoints bloqueados desde LocalScript.
+	Copia TODO este archivo a un LocalScript.
 ]]
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local AvatarEditorService = game:GetService("AvatarEditorService")
+local RunService = game:GetService("RunService")
+
+if RunService:IsServer() and not RunService:IsClient() then
+	warn("[EmoteCatalog] Este archivo tiene que ser un LocalScript en StarterPlayerScripts.")
+	return
+end
 
 local player = Players.LocalPlayer
+if not player then
+	warn("[EmoteCatalog] No hay LocalPlayer. Usa un LocalScript, no un Script de servidor.")
+	return
+end
+
 local playerGui = player:WaitForChild("PlayerGui")
 
 local COLORS = {
@@ -34,43 +42,100 @@ local COLORS = {
 local FONT = Enum.Font.Gotham
 local FONT_BOLD = Enum.Font.GothamBold
 local FONT_MED = Enum.Font.GothamMedium
-
 local COLUMNS = 3
-local PAGE_IDLE = 0.15
-local SEARCH_DELAY = 0.35
 
-type EmoteItem = {
-	id: number,
-	name: string,
-	price: number?,
-	priceStatus: string?,
+-- IDs, nombres y precios reales del Marketplace (EmoteAnimation).
+local FALLBACK_EMOTES = {
+	{id=135669863262978, name="Ratatata [MOCAP]", price=55},
+	{id=138274472194739, name="🔥 Tubo Dance", price=55},
+	{id=99967539604568, name="Kasane Teto [R6]", price=55},
+	{id=105983696629099, name="♡ Sitting Cute Pose", price=55},
+	{id=128427568238614, name="scuba dance!! 🤿", price=55},
+	{id=124630114425909, name="Chinese Cat Dance 🐈 ♡", price=55},
+	{id=140419068803831, name="♡ cute bowing pose", price=55},
+	{id=135733828012519, name="♡ cute little figurine stand pose", price=55},
+	{id=80996014547344, name="🔥 I Got The Feeling [BEST] 🔥", price=55},
+	{id=87682285023546, name="♡ cute kitty meow pose", price=55},
+	{id=105919939077031, name="♡ cute shy hands pose", price=55},
+	{id=81290863225182, name="Step Yokoyure", price=55},
+	{id=79908632555947, name="[OG] Needy Plancheey Bounce", price=55},
+	{id=112487392936070, name="FAKE MM2 Death", price=55},
+	{id=85539118388694, name="Move Your Body", price=55},
+	{id=128361681108488, name="MM2 Sit", price=55},
+	{id=92376636301266, name="Getting Natty", price=55},
+	{id=102156359502324, name="BLACKPINK - I Bring the Pain Like…", price=55},
+	{id=129318794208523, name="Cali Pose 3.0", price=60},
+	{id=89422843608956, name="BLACKPINK - Shut Down", price=55},
+	{id=134186568925294, name="♡ Kawaii Heart Pose", price=55},
+	{id=83486899998763, name="Neck Rolling", price=55},
+	{id=90702753520455, name="Easy", price=55},
+	{id=121156272689339, name="🙏 Muay Thai Wai Kru Ritual, Standing 🥊", price=55},
+	{id=116014955957687, name="Shootin' Hoops", price=55},
+	{id=124669321350123, name="🐾 cutiecat kawaii kitty bounce", price=55},
+	{id=131547710296022, name="SaWaDiKa - LISA", price=55},
+	{id=131605495388312, name="Worm Cosmic Spiral Endless", price=55},
+	{id=124687896624185, name="Prayer - Muslim Sujud ☪️🕋🤲🕌", price=55},
+	{id=115247082615045, name="Creepy Spider 🕷️", price=55},
+	{id=96649442187973, name="The Bass Dance - Trend", price=55},
+	{id=122389262342400, name="Confident Baddie Profile Pose", price=55},
+	{id=79500766652981, name="Jeyke Funk Dance", price=55},
+	{id=135575670072680, name="Twisting Body 🌪️", price=55},
+	{id=114276171614039, name="Jack In The Box", price=55},
+	{id=114466050070275, name="JENNIE's Cute Sitting Profile Pose", price=60},
+	{id=79795305221612, name="Floating Aura", price=55},
+	{id=110553756436163, name="Helicopter", price=55},
+	{id=83606297144428, name="Rat Dance", price=55},
+	{id=134913783169182, name="Plane", price=55},
+	{id=14353423348, name="Baby Queen - Bouncy Twirl", price=55},
+	{id=85076031433488, name="Tank", price=55},
+	{id=115407270129592, name="Car", price=55},
+	{id=129668542320076, name="/e sit", price=55},
+	{id=107498554725527, name="Fake MM2 Death", price=55},
+	{id=73500261613116, name="Box", price=55},
+	{id=15610015346, name="Yungblud Happier Jump", price=55},
+	{id=84868707350198, name="Hide", price=55},
+	{id=14353421343, name="Baby Queen - Face Frame", price=55},
+	{id=3576823880, name="Point2", price=0, priceStatus="Free"},
+	{id=3576968026, name="Shrug", price=0, priceStatus="Free"},
+	{id=3576686446, name="Hello", price=0, priceStatus="Free"},
+	{id=3360686498, name="Stadium", price=0, priceStatus="Free"},
+	{id=3360689775, name="Salute", price=0, priceStatus="Free"},
+	{id=3716636630, name="Monkey", price=55},
+	{id=4646306583, name="Curtsy", price=55},
+	{id=3360692915, name="Tilt", price=0, priceStatus="Free"},
+	{id=3823158750, name="Godlike", price=80},
+	{id=4849499887, name="Happy", price=55},
+	{id=5915779043, name="Applaud", price=0, priceStatus="Free"},
+	{id=4689362868, name="Sleep", price=55},
+	{id=5104377791, name="Hero Landing", price=80},
+	{id=3576717965, name="Shy", price=55},
+	{id=5917570207, name="Floss Dance", price=80},
+	{id=7466046574, name="Quiet Waves", price=110},
+	{id=4272484885, name="Baby Dance", price=100},
 }
 
-local favorites: { [number]: EmoteItem } = {}
-local selectedId: number? = nil
+local favorites = {}
+local selectedId = nil
 local showFavorites = false
 local showPopular = false
 local searchQuery = ""
-local catalogPages: any = nil
+local catalogPages = nil
 local loadingPage = false
 local searchToken = 0
 local isOpen = true
-local cardRefs: { [number]: Frame } = {}
-local knownItems: { [number]: EmoteItem } = {}
-local playingTrack: AnimationTrack? = nil
-local playingId: number? = nil
-local playingConn: RBXScriptConnection? = nil
+local cardRefs = {}
+local usingFallback = false
+local fallbackCursor = 0
+local playingTrack = nil
+local playingId = nil
+local savedAnimate = nil
 
-local beginSearch: () -> ()
-local loadNextPage: (number?) -> ()
-local rebuildFromFavorites: () -> ()
-
-local function create(className: string, props: { [string]: any }?): any
+local function create(className, props)
 	local inst = Instance.new(className)
 	if props then
-		for key, value in props do
+		for key, value in pairs(props) do
 			if key ~= "Parent" then
-				(inst :: any)[key] = value
+				inst[key] = value
 			end
 		end
 		if props.Parent then
@@ -80,11 +145,11 @@ local function create(className: string, props: { [string]: any }?): any
 	return inst
 end
 
-local function corner(parent: Instance, px: number)
+local function corner(parent, px)
 	return create("UICorner", { CornerRadius = UDim.new(0, px), Parent = parent })
 end
 
-local function stroke(parent: Instance, color: Color3, thickness: number, transparency: number)
+local function stroke(parent, color, thickness, transparency)
 	return create("UIStroke", {
 		Color = color,
 		Thickness = thickness,
@@ -94,7 +159,7 @@ local function stroke(parent: Instance, color: Color3, thickness: number, transp
 	})
 end
 
-local function pad(parent: Instance, t: number, r: number, b: number, l: number)
+local function pad(parent, t, r, b, l)
 	return create("UIPadding", {
 		PaddingTop = UDim.new(0, t),
 		PaddingRight = UDim.new(0, r),
@@ -104,11 +169,11 @@ local function pad(parent: Instance, t: number, r: number, b: number, l: number)
 	})
 end
 
-local function thumbUri(id: number): string
-	return ("rbxthumb://type=Asset&id=%d&w=150&h=150"):format(id)
+local function thumbUri(id)
+	return "rbxthumb://type=Asset&id=" .. tostring(id) .. "&w=150&h=150"
 end
 
-local function formatPrice(item: EmoteItem): string
+local function formatPrice(item)
 	if item.priceStatus == "Free" or item.price == 0 then
 		return "Gratis"
 	end
@@ -118,7 +183,7 @@ local function formatPrice(item: EmoteItem): string
 	return tostring(item.price)
 end
 
-local function normalize(raw: any): EmoteItem?
+local function normalize(raw)
 	local id = raw.Id or raw.id
 	local name = raw.Name or raw.name
 	if typeof(id) ~= "number" or typeof(name) ~= "string" or name == "" then
@@ -129,9 +194,6 @@ local function normalize(raw: any): EmoteItem?
 	if typeof(price) ~= "number" then
 		price = nil
 	end
-	if typeof(status) ~= "string" then
-		status = nil
-	end
 	return {
 		id = id,
 		name = name,
@@ -140,12 +202,17 @@ local function normalize(raw: any): EmoteItem?
 	}
 end
 
-local gui = create("ScreenGui", {
+local gui = playerGui:FindFirstChild("UGCEmoteCatalog")
+if gui then
+	gui:Destroy()
+end
+
+gui = create("ScreenGui", {
 	Name = "UGCEmoteCatalog",
 	ResetOnSpawn = false,
 	IgnoreGuiInset = true,
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-	DisplayOrder = 120,
+	DisplayOrder = 1000,
 	Parent = playerGui,
 })
 
@@ -188,21 +255,16 @@ create("UIListLayout", {
 local searchHolder = create("Frame", {
 	Name = "Search",
 	LayoutOrder = 1,
-	Size = UDim2.new(0, 120, 1, 0),
+	Size = UDim2.new(0, 110, 1, 0),
 	BackgroundColor3 = COLORS.Inset,
 	BackgroundTransparency = 0.15,
 	BorderSizePixel = 0,
 	Parent = toolbar,
 })
-pcall(function()
-	local flex = Instance.new("UIFlexItem")
-	flex.FlexMode = Enum.UIFlexMode.Fill
-	flex.Parent = searchHolder
-end)
 corner(searchHolder, 7)
 stroke(searchHolder, COLORS.Stroke, 1, 0.7)
 
-local searchIcon = create("TextLabel", {
+create("TextLabel", {
 	BackgroundTransparency = 1,
 	Size = UDim2.new(0, 22, 1, 0),
 	Text = "⌕",
@@ -227,7 +289,7 @@ local searchBox = create("TextBox", {
 	Parent = searchHolder,
 })
 
-local function makeIconButton(name: string, order: number, text: string, bg: Color3, parent: Instance): TextButton
+local function makeIconButton(name, order, text, bg, parent)
 	local btn = create("TextButton", {
 		Name = name,
 		LayoutOrder = order,
@@ -255,7 +317,6 @@ local popularBtn = create("TextButton", {
 	LayoutOrder = 4,
 	Size = UDim2.new(0, 72, 0, 28),
 	BackgroundColor3 = COLORS.CyanBtn,
-	BackgroundTransparency = 0,
 	BorderSizePixel = 0,
 	Text = "Populares",
 	TextColor3 = COLORS.White,
@@ -268,7 +329,6 @@ corner(popularBtn, 7)
 
 local closeBtn = makeIconButton("Close", 5, "×", COLORS.Red, toolbar)
 closeBtn.TextSize = 18
-;(closeBtn:FindFirstChildOfClass("UIStroke") :: UIStroke).Transparency = 0.85
 
 local gridWrap = create("ScrollingFrame", {
 	Name = "GridWrap",
@@ -306,12 +366,13 @@ local gridLayout = create("UIGridLayout", {
 local emptyLabel = create("TextLabel", {
 	Name = "Empty",
 	BackgroundTransparency = 1,
-	Size = UDim2.new(1, 0, 0, 48),
-	Position = UDim2.new(0, 0, 0, 24),
+	Size = UDim2.new(1, -16, 0, 60),
+	Position = UDim2.new(0, 8, 0, 24),
 	Text = "",
 	TextColor3 = COLORS.Muted,
 	TextSize = 12,
 	Font = FONT_MED,
+	TextWrapped = true,
 	Visible = false,
 	ZIndex = 2,
 	Parent = gridWrap,
@@ -426,10 +487,10 @@ local reopenBtn = create("TextButton", {
 corner(reopenBtn, 9)
 stroke(reopenBtn, COLORS.Stroke, 1, 0.55)
 
-local function setButtonActive(btn: TextButton, active: boolean, activeColor: Color3, idleColor: Color3)
-	btn.BackgroundColor3 = if active then activeColor else idleColor
+local function setButtonActive(btn, active, activeColor, idleColor)
+	btn.BackgroundColor3 = active and activeColor or idleColor
 	if btn == popularBtn then
-		btn.TextColor3 = if active then Color3.fromRGB(6, 33, 38) else COLORS.White
+		btn.TextColor3 = active and Color3.fromRGB(6, 33, 38) or COLORS.White
 	end
 end
 
@@ -446,112 +507,129 @@ local function resizeGrid()
 	gridLayout.CellSize = UDim2.new(0, cell, 0, cell + 52)
 end
 
-local function setOpen(open: boolean)
+local function layoutBody()
+	local bottom = details.Visible and 54 or 0
+	gridWrap.Size = UDim2.new(1, 0, 1, -(42 + bottom))
+end
+
+local function setOpen(open)
 	isOpen = open
 	panel.Visible = open
 	reopenBtn.Visible = not open
 end
 
-local function highlight(id: number?)
+local function highlight(id)
 	selectedId = id
-	for cardId, card in cardRefs do
+	for cardId, card in pairs(cardRefs) do
 		local selected = cardId == id
-		card.BackgroundColor3 = if selected then COLORS.CardSelected else COLORS.Card
+		card.BackgroundColor3 = selected and COLORS.CardSelected or COLORS.Card
 		local s = card:FindFirstChildOfClass("UIStroke")
 		if s then
-			s.Color = if selected then COLORS.Selected else COLORS.Stroke
-			s.Transparency = if selected then 0.15 else 0.7
+			s.Color = selected and COLORS.Selected or COLORS.Stroke
+			s.Transparency = selected and 0.15 or 0.7
 		end
 	end
 end
 
-local function layoutBody()
-	local bottom = if details.Visible then 54 else 0
-	gridWrap.Size = UDim2.new(1, 0, 1, -(42 + bottom))
+local function restoreAnimate(character)
+	if savedAnimate and savedAnimate.Parent then
+		savedAnimate.Disabled = false
+	end
+	savedAnimate = nil
+	local animate = character and character:FindFirstChild("Animate")
+	if animate and animate:IsA("LocalScript") then
+		animate.Disabled = false
+	end
 end
 
 local function stopEmote()
-	if playingConn then
-		playingConn:Disconnect()
-		playingConn = nil
-	end
 	if playingTrack then
 		pcall(function()
-			playingTrack:Stop(0.12)
+			playingTrack:Stop(0.1)
 		end)
 		playingTrack = nil
 	end
 	playingId = nil
+	local character = player.Character
+	if character then
+		restoreAnimate(character)
+	end
 end
 
-local function getHumanoid(): Humanoid?
+local function stopOtherTracks(animator, keep)
+	if not animator then
+		return
+	end
+	local ok, tracks = pcall(function()
+		return animator:GetPlayingAnimationTracks()
+	end)
+	if not ok or type(tracks) ~= "table" then
+		return
+	end
+	for _, track in ipairs(tracks) do
+		if track ~= keep then
+			pcall(function()
+				track:Stop(0.05)
+			end)
+		end
+	end
+end
+
+local function playEmoteOnAvatar(item)
 	local character = player.Character
 	if not character then
-		return nil
+		return false, "No hay personaje"
 	end
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid or humanoid.Health <= 0 then
-		return nil
+		return false, "Sin Humanoid"
 	end
-	return humanoid
-end
-
-local function bindTrack(track: AnimationTrack, itemId: number)
-	playingTrack = track
-	playingId = itemId
-	pcall(function()
-		track.Priority = Enum.AnimationPriority.Action4
-		track.Looped = true
-		if not track.IsPlaying then
-			track:Play(0.12)
-		end
-	end)
-	if playingConn then
-		playingConn:Disconnect()
-	end
-	playingConn = track.Stopped:Connect(function()
-		if playingTrack == track then
-			playingTrack = nil
-			if playingId == itemId then
-				playingId = nil
-			end
-		end
-	end)
-end
-
-local function playEmoteOnAvatar(item: EmoteItem): boolean
-	local humanoid = getHumanoid()
-	if not humanoid then
-		return false
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if not animator then
+		animator = humanoid:FindFirstChild("Animator")
 	end
 
 	if playingId == item.id and playingTrack and playingTrack.IsPlaying then
 		stopEmote()
-		return false
+		return false, "detenido"
 	end
 
 	stopEmote()
 
-	local okId, track = pcall(function()
-		return (humanoid :: any):PlayEmoteAndGetAnimTrackById(item.id)
-	end)
-	if okId and typeof(track) == "Instance" and track:IsA("AnimationTrack") then
-		bindTrack(track, item.id)
-		return true
+	local animate = character:FindFirstChild("Animate")
+	if animate and (animate:IsA("LocalScript") or animate:IsA("Script")) then
+		savedAnimate = animate
+		animate.Disabled = true
 	end
 
-	local okName, played = pcall(function()
-		return humanoid:PlayEmote(item.name)
+	stopOtherTracks(animator, nil)
+
+	local track = nil
+	local okPlay = pcall(function()
+		track = humanoid:PlayEmoteAndGetAnimTrackById(item.id)
 	end)
-	if okName and played then
+	if okPlay and typeof(track) == "Instance" then
+		pcall(function()
+			track.Looped = true
+			track.Priority = Enum.AnimationPriority.Action
+			if not track.IsPlaying then
+				track:Play(0.1)
+			end
+		end)
+		playingTrack = track
 		playingId = item.id
-		return true
+		return true, nil
 	end
 
-	local animator = humanoid:FindFirstChildOfClass("Animator")
-	if not animator then
-		animator = humanoid:FindFirstChild("Animator") :: Animator?
+	local playedName = false
+	pcall(function()
+		playedName = humanoid:PlayEmote(item.name) == true
+	end)
+	if playedName then
+		playingId = item.id
+		return true, nil
 	end
+
 	if animator then
 		local animation = Instance.new("Animation")
 		animation.Name = "UGCEmotePreview"
@@ -559,44 +637,57 @@ local function playEmoteOnAvatar(item: EmoteItem): boolean
 		local okLoad, loaded = pcall(function()
 			return animator:LoadAnimation(animation)
 		end)
-		if okLoad and typeof(loaded) == "Instance" and loaded:IsA("AnimationTrack") then
-			bindTrack(loaded, item.id)
-			return true
+		if okLoad and typeof(loaded) == "Instance" then
+			pcall(function()
+				loaded.Looped = true
+				loaded.Priority = Enum.AnimationPriority.Action
+				loaded:Play(0.1)
+			end)
+			playingTrack = loaded
+			playingId = item.id
+			return true, nil
 		end
 	end
 
-	return false
+	restoreAnimate(character)
+	return false, "No se pudo reproducir"
 end
 
-local function showDetails(item: EmoteItem)
+local function showDetails(item)
 	details.Visible = true
 	layoutBody()
 	idBox.Text = tostring(item.id)
 	detailsPrice.Text = "R$ " .. formatPrice(item)
 	highlight(item.id)
 
-	local playing = playEmoteOnAvatar(item)
-	if playing then
-		detailsName.Text = "▶  " .. item.name
-	else
-		detailsName.Text = item.name
-	end
+	task.spawn(function()
+		local playing, err = playEmoteOnAvatar(item)
+		if playing then
+			detailsName.Text = "▶  " .. item.name
+		elseif err == "detenido" then
+			detailsName.Text = item.name
+		else
+			detailsName.Text = item.name
+			if err and err ~= "detenido" then
+				detailsName.Text = item.name .. "  (" .. err .. ")"
+			end
+		end
+	end)
 end
 
 local function clearGrid()
-	for _, child in grid:GetChildren() do
+	for _, child in ipairs(grid:GetChildren()) do
 		if child:IsA("GuiObject") then
 			child:Destroy()
 		end
 	end
-	table.clear(cardRefs)
+	cardRefs = {}
 end
 
-local function addCard(item: EmoteItem, order: number)
+local function addCard(item, order)
 	if cardRefs[item.id] then
 		return
 	end
-	knownItems[item.id] = item
 
 	local card = create("TextButton", {
 		Name = "Emote_" .. tostring(item.id),
@@ -659,8 +750,8 @@ local function addCard(item: EmoteItem, order: number)
 		BackgroundColor3 = COLORS.Inset,
 		BackgroundTransparency = 0.3,
 		BorderSizePixel = 0,
-		Text = if favorites[item.id] then "★" else "☆",
-		TextColor3 = if favorites[item.id] then Color3.fromRGB(255, 213, 106) else COLORS.White,
+		Text = favorites[item.id] and "★" or "☆",
+		TextColor3 = favorites[item.id] and Color3.fromRGB(255, 213, 106) or COLORS.White,
 		TextSize = 12,
 		Font = FONT_BOLD,
 		ZIndex = 3,
@@ -682,9 +773,6 @@ local function addCard(item: EmoteItem, order: number)
 			star.Text = "★"
 			star.TextColor3 = Color3.fromRGB(255, 213, 106)
 		end
-		if showFavorites then
-			rebuildFromFavorites()
-		end
 	end)
 
 	if selectedId == item.id then
@@ -692,51 +780,150 @@ local function addCard(item: EmoteItem, order: number)
 	end
 end
 
-rebuildFromFavorites = function()
-	clearGrid()
-	local order = 1
+local function filteredFallback()
 	local query = string.lower(searchQuery)
-	for _, item in favorites do
-		local matches = query == "" or string.find(string.lower(item.name), query, 1, true) ~= nil
-		if matches then
-			addCard(item, order)
-			order += 1
+	local list = {}
+	for _, item in ipairs(FALLBACK_EMOTES) do
+		local ok = true
+		if showFavorites and not favorites[item.id] then
+			ok = false
+		end
+		if ok and query ~= "" then
+			if not string.find(string.lower(item.name), query, 1, true) then
+				ok = false
+			end
+		end
+		if ok then
+			table.insert(list, item)
 		end
 	end
-	emptyLabel.Visible = order == 1
-	emptyLabel.Text = if order == 1 then "Sin favoritos." else ""
+	if showPopular then
+		-- Los últimos del fallback son los más populares / oficiales.
+		table.sort(list, function(a, b)
+			return a.id < b.id
+		end)
+	end
+	return list
 end
 
-local function pickSortType(popular: boolean): Enum.CatalogSortType
+local function renderFallbackPage()
+	local list = filteredFallback()
+	local order = 0
+	for _, child in ipairs(grid:GetChildren()) do
+		if child:IsA("GuiObject") then
+			order = order + 1
+		end
+	end
+	local added = 0
+	while fallbackCursor < #list and added < 18 do
+		fallbackCursor = fallbackCursor + 1
+		order = order + 1
+		addCard(list[fallbackCursor], order)
+		added = added + 1
+	end
+	emptyLabel.Visible = order == 0
+	emptyLabel.Text = order == 0 and "No se encontraron emotes." or ""
+end
+
+local function rebuildFromFavorites()
+	clearGrid()
+	local order = 0
+	local query = string.lower(searchQuery)
+	for _, item in pairs(favorites) do
+		if query == "" or string.find(string.lower(item.name), query, 1, true) then
+			order = order + 1
+			addCard(item, order)
+		end
+	end
+	emptyLabel.Visible = order == 0
+	emptyLabel.Text = order == 0 and "Sin favoritos." or ""
+end
+
+local function pickSortType(popular)
 	if popular then
 		local ok, value = pcall(function()
-			return (Enum.CatalogSortType :: any).MostFavorited
+			return Enum.CatalogSortType.MostFavorited
 		end)
 		if ok and value then
 			return value
 		end
-		ok, value = pcall(function()
-			return (Enum.CatalogSortType :: any).Bestselling
-		end)
-		if ok and value then
-			return value
-		end
-	else
-		local ok, value = pcall(function()
-			return (Enum.CatalogSortType :: any).RecentlyUpdated
-		end)
-		if ok and value then
-			return value
-		end
+	end
+	local ok2, value2 = pcall(function()
+		return Enum.CatalogSortType.RecentlyUpdated
+	end)
+	if ok2 and value2 then
+		return value2
 	end
 	return Enum.CatalogSortType.Relevance
 end
 
-beginSearch = function()
-	searchToken += 1
+local function loadNextPage(token)
+	if loadingPage then
+		return
+	end
+	if token and token ~= searchToken then
+		return
+	end
+	if usingFallback then
+		renderFallbackPage()
+		return
+	end
+	if catalogPages == nil then
+		return
+	end
+	loadingPage = true
+	task.spawn(function()
+		local okPage, page = pcall(function()
+			return catalogPages:GetCurrentPage()
+		end)
+		if not okPage or type(page) ~= "table" then
+			loadingPage = false
+			usingFallback = true
+			fallbackCursor = 0
+			renderFallbackPage()
+			return
+		end
+
+		local order = 0
+		for _, child in ipairs(grid:GetChildren()) do
+			if child:IsA("GuiObject") then
+				order = order + 1
+			end
+		end
+
+		for _, raw in ipairs(page) do
+			local item = normalize(raw)
+			if item then
+				order = order + 1
+				addCard(item, order)
+			end
+		end
+
+		emptyLabel.Visible = order == 0
+		emptyLabel.Text = order == 0 and "No se encontraron emotes." or ""
+
+		local finished = true
+		pcall(function()
+			finished = catalogPages.IsFinished
+		end)
+		if not finished then
+			pcall(function()
+				catalogPages:AdvanceToNextPageAsync()
+			end)
+		else
+			catalogPages = nil
+		end
+		loadingPage = false
+	end)
+end
+
+local function beginSearch()
+	searchToken = searchToken + 1
 	local token = searchToken
 	loadingPage = false
 	catalogPages = nil
+	usingFallback = false
+	fallbackCursor = 0
 	clearGrid()
 	emptyLabel.Visible = true
 	emptyLabel.Text = "Cargando emotes UGC..."
@@ -753,97 +940,49 @@ beginSearch = function()
 			params.SearchKeyword = searchQuery
 		end
 		pcall(function()
-			params.IncludeOffSale = false
-		end)
-		pcall(function()
 			params.SortType = pickSortType(showPopular)
 		end)
 
-		local ok, pagesOrErr = pcall(function()
-			return AvatarEditorService:SearchCatalog(params)
+		local pages = nil
+		local ok = pcall(function()
+			if AvatarEditorService.SearchCatalogAsync then
+				pages = AvatarEditorService:SearchCatalogAsync(params)
+			else
+				pages = AvatarEditorService:SearchCatalog(params)
+			end
 		end)
+
 		if token ~= searchToken then
 			return
 		end
-		if not ok then
-			emptyLabel.Text = "No se pudo consultar el catálogo.\nAvatarEditorService no está disponible."
+
+		if not ok or pages == nil then
+			usingFallback = true
+			emptyLabel.Text = ""
+			renderFallbackPage()
 			return
 		end
-		catalogPages = pagesOrErr
+
+		catalogPages = pages
 		loadNextPage(token)
 	end)
 end
 
-function loadNextPage(token: number?)
-	if loadingPage or catalogPages == nil then
-		return
-	end
-	if token and token ~= searchToken then
-		return
-	end
-	loadingPage = true
-
-	task.spawn(function()
-		local okPage, page = pcall(function()
-			return catalogPages:GetCurrentPage()
-		end)
-		if not okPage or type(page) ~= "table" then
-			loadingPage = false
-			emptyLabel.Text = "No hay resultados."
-			emptyLabel.Visible = true
-			return
-		end
-
-		local order = 0
-		for _, child in grid:GetChildren() do
-			if child:IsA("GuiObject") then
-				order += 1
-			end
-		end
-
-		local added = 0
-		for _, raw in page do
-			local item = normalize(raw)
-			if item then
-				order += 1
-				addCard(item, order)
-				added += 1
-			end
-		end
-
-		emptyLabel.Visible = order == 0
-		emptyLabel.Text = if order == 0 then "No se encontraron emotes." else ""
-
-		local finished = true
-		pcall(function()
-			finished = catalogPages.IsFinished
-		end)
-		if not finished then
-			pcall(function()
-				catalogPages:AdvanceToNextPageAsync()
-			end)
-		else
-			catalogPages = nil
-		end
-
-		task.wait(PAGE_IDLE)
-		loadingPage = false
-	end)
-end
-
-local searchThread: thread? = nil
+local searchThread = nil
 searchBox:GetPropertyChangedSignal("Text"):Connect(function()
 	searchQuery = searchBox.Text
 	if searchThread then
 		task.cancel(searchThread)
 	end
-	searchThread = task.delay(SEARCH_DELAY, function()
+	searchThread = task.delay(0.35, function()
 		beginSearch()
 	end)
 end)
 
 refreshBtn.MouseButton1Click:Connect(function()
-	TweenService:Create(refreshBtn, TweenInfo.new(0.45), { Rotation = refreshBtn.Rotation + 360 }):Play()
+	pcall(function()
+		TweenService:Create(refreshBtn, TweenInfo.new(0.45), { Rotation = refreshBtn.Rotation + 360 }):Play()
+	end)
 	beginSearch()
 end)
 
@@ -885,13 +1024,17 @@ copyBtn.MouseButton1Click:Connect(function()
 end)
 
 gridWrap:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
-	if showFavorites or catalogPages == nil or loadingPage then
+	if showFavorites or loadingPage then
 		return
 	end
 	local window = gridWrap.AbsoluteWindowSize.Y
 	local canvas = gridWrap.AbsoluteCanvasSize.Y
 	if canvas > 0 and gridWrap.CanvasPosition.Y + window >= canvas - 90 then
-		loadNextPage(searchToken)
+		if usingFallback then
+			renderFallbackPage()
+		else
+			loadNextPage(searchToken)
+		end
 	end
 end)
 
@@ -899,9 +1042,10 @@ panel:GetPropertyChangedSignal("AbsoluteSize"):Connect(resizeGrid)
 grid:GetPropertyChangedSignal("AbsoluteSize"):Connect(resizeGrid)
 
 local function adaptLayout()
-	local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
-	local margin = if viewport.X < 700 then 6 else 12
-	local width = if viewport.X < 700 then math.min(300, viewport.X - margin * 2) else 332
+	local cam = workspace.CurrentCamera
+	local viewport = cam and cam.ViewportSize or Vector2.new(1280, 720)
+	local margin = viewport.X < 700 and 6 or 12
+	local width = viewport.X < 700 and math.min(300, viewport.X - margin * 2) or 332
 	panel.Position = UDim2.new(1, -margin, 0, margin)
 	panel.Size = UDim2.new(0, width, 1, -(margin * 2))
 	reopenBtn.Position = UDim2.new(1, -margin, 0, margin)
@@ -924,6 +1068,10 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if input.KeyCode == Enum.KeyCode.Escape and isOpen then
 		setOpen(false)
 	end
+end)
+
+player.CharacterAdded:Connect(function()
+	stopEmote()
 end)
 
 beginSearch()
