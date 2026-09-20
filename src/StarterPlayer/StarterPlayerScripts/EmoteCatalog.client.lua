@@ -57,6 +57,9 @@ local searchToken = 0
 local isOpen = true
 local cardRefs: { [number]: Frame } = {}
 local knownItems: { [number]: EmoteItem } = {}
+local playingTrack: AnimationTrack? = nil
+local playingId: number? = nil
+local playingConn: RBXScriptConnection? = nil
 
 local beginSearch: () -> ()
 local loadNextPage: (number?) -> ()
@@ -467,13 +470,117 @@ local function layoutBody()
 	gridWrap.Size = UDim2.new(1, 0, 1, -(42 + bottom))
 end
 
+local function stopEmote()
+	if playingConn then
+		playingConn:Disconnect()
+		playingConn = nil
+	end
+	if playingTrack then
+		pcall(function()
+			playingTrack:Stop(0.12)
+		end)
+		playingTrack = nil
+	end
+	playingId = nil
+end
+
+local function getHumanoid(): Humanoid?
+	local character = player.Character
+	if not character then
+		return nil
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then
+		return nil
+	end
+	return humanoid
+end
+
+local function bindTrack(track: AnimationTrack, itemId: number)
+	playingTrack = track
+	playingId = itemId
+	pcall(function()
+		track.Priority = Enum.AnimationPriority.Action4
+		track.Looped = true
+		if not track.IsPlaying then
+			track:Play(0.12)
+		end
+	end)
+	if playingConn then
+		playingConn:Disconnect()
+	end
+	playingConn = track.Stopped:Connect(function()
+		if playingTrack == track then
+			playingTrack = nil
+			if playingId == itemId then
+				playingId = nil
+			end
+		end
+	end)
+end
+
+local function playEmoteOnAvatar(item: EmoteItem): boolean
+	local humanoid = getHumanoid()
+	if not humanoid then
+		return false
+	end
+
+	if playingId == item.id and playingTrack and playingTrack.IsPlaying then
+		stopEmote()
+		return false
+	end
+
+	stopEmote()
+
+	local okId, track = pcall(function()
+		return (humanoid :: any):PlayEmoteAndGetAnimTrackById(item.id)
+	end)
+	if okId and typeof(track) == "Instance" and track:IsA("AnimationTrack") then
+		bindTrack(track, item.id)
+		return true
+	end
+
+	local okName, played = pcall(function()
+		return humanoid:PlayEmote(item.name)
+	end)
+	if okName and played then
+		playingId = item.id
+		return true
+	end
+
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if not animator then
+		animator = humanoid:FindFirstChild("Animator") :: Animator?
+	end
+	if animator then
+		local animation = Instance.new("Animation")
+		animation.Name = "UGCEmotePreview"
+		animation.AnimationId = "rbxassetid://" .. tostring(item.id)
+		local okLoad, loaded = pcall(function()
+			return animator:LoadAnimation(animation)
+		end)
+		if okLoad and typeof(loaded) == "Instance" and loaded:IsA("AnimationTrack") then
+			bindTrack(loaded, item.id)
+			return true
+		end
+	end
+
+	return false
+end
+
 local function showDetails(item: EmoteItem)
 	details.Visible = true
 	layoutBody()
-	detailsName.Text = item.name
 	idBox.Text = tostring(item.id)
 	detailsPrice.Text = "R$ " .. formatPrice(item)
 	highlight(item.id)
+
+	local playing = playEmoteOnAvatar(item)
+	if playing then
+		detailsName.Text = "▶  " .. item.name
+	else
+		detailsName.Text = item.name
+	end
 end
 
 local function clearGrid()

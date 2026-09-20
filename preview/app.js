@@ -129,14 +129,24 @@ function createCard(item) {
 }
 
 function selectItem(item) {
-  state.selectedId = item.id;
+  const again = state.selectedId === item.id;
+  state.selectedId = again ? null : item.id;
   for (const node of els.grid.querySelectorAll(".card")) {
-    node.classList.toggle("selected", Number(node.dataset.id) === item.id);
+    const on = Number(node.dataset.id) === state.selectedId;
+    node.classList.toggle("selected", on);
+    node.classList.toggle("playing", on);
+  }
+  if (!state.selectedId) {
+    els.details.hidden = false;
+    els.detailsName.textContent = item.name;
+    toast("Emote detenido");
+    return;
   }
   els.details.hidden = false;
-  els.detailsName.textContent = item.name;
+  els.detailsName.textContent = "▶  " + item.name;
   els.detailsId.value = String(item.id);
   els.detailsPrice.innerHTML = formatPrice(item);
+  toast("Reproduciendo en el avatar");
 }
 
 function toggleFavorite(id) {
